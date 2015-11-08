@@ -1,79 +1,62 @@
 # -*- coding: utf-8 -*-
 import sys
-import re
+# import re
 import urlparse
 import xbmc
 import xbmcgui
 import xbmcplugin
-import xbmcaddon
-import functools
+# import xbmcaddon
+# import functools
 from lib.postnaukalib import (
         Logger,
         MultipleActions,
-        get_plugin_name,
+        # get_plugin_name,
         build_url,
         Web,
         Parser,
-        StorageServer,
-        Base,
+        List,
+        # StorageServer,
+        Plugin,
         MAIN_MENU,
         SCIENCES,
-        XBOX,
-        YTID,
+        # XBOX,
+        # YTID,
         SITE,
-        URLS
+        URLS,
+        youtubeAddonUrl,
+        CACHE
     )
 
 
-base_url = sys.argv[0]
-addon_handle = int(sys.argv[1])
+# base_url = sys.argv[0]
+# addon_handle = int(sys.argv[1])
 args = urlparse.parse_qs(sys.argv[2][1:])
 
-plugin_name = get_plugin_name(base_url)
-addon = xbmcaddon.Addon(id=plugin_name)
 
-base_info = (plugin_name, addon_handle, addon)
-Base.info = base_info
+# base_url, addon_handle, addon = Plugin.props
+# plugin_name = get_plugin_name(base_url)
+# addon = xbmcaddon.Addon(id=plugin_name)
 
-addon_path = addon.getAddonInfo('path').decode('utf-8')
-addon_profile = xbmc.translatePath(
-    addon.getAddonInfo('profile')).decode('utf-8')
+# Base.props = (plugin_name, addon_handle, addon)
 
+# addon_path = Plugin.addon.getAddonInfo('path').decode('utf-8')
+# addon_profile = xbmc.translatePath(
+#     Plugin.addon.getAddonInfo('profile')).decode('utf-8')
 
+xbmcplugin.setContent(Plugin.handle, 'movies')
 sci_urls_dict = dict((sci, SITE + "themes/" + sci) for sci in SCIENCES)
 URLS.update(sci_urls_dict)
 
-youtubeAddonUrl = ("plugin://plugin.video.youtube/"
-                   "?path=/root/video&action=play_video&videoid=")
 
-xbmcplugin.setContent(addon_handle, 'movies')
 parser = Parser()
 log = Logger()
-log.debug("Base URL: {}".format(base_url))
+log.debug("Base URL: {}".format(Plugin.url))
 log.debug("Args: {}".format(args))
-
-main_cache = StorageServer("main_cache", int(addon.getSetting("main_cache")))
-page_cache = StorageServer("page_cache", int(addon.getSetting("page_cache")))
-
-
-def cached(cache_type):
-    def deca(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            log.debug("Caching decorator with type {}".format(cache_type))
-            if addon.getSetting(cache_type):
-                cache_function = globals()[cache_type]
-                log.debug("Choosing cache function {}".format(
-                    cache_function))
-                return cache_function.cacheFunction(func, *args, **kwargs)
-            else:
-                return func(*args, **kwargs)
-        return wrapper
-    return deca
 
 
 def cache_with(cache_type, func, *args, **kwargs):
-    cache_function = globals()[cache_type]
+    # cache_function = globals()[cache_type]
+    cache_function = CACHE[cache_type]
     return cache_function.cacheFunction(func, *args, **kwargs)
 
 
@@ -81,10 +64,14 @@ def get_url(url, cache_type="page_cache"):
     log.debug("Retrieving {url}".format(url=url))
     web = Web()
     if cache_type:
-        cache_function = globals()[cache_type]
-        return cache_function.cacheFunction(web.get_url, url)
+        return cache_with("main_cache", web.get_url, url)
     else:
         return web.get_url(url)
+    # if cache_type:
+    #     cache_function = globals()[cache_type]
+    #     return cache_function.cacheFunction(web.get_url, url)
+    # else:
+    #     return web.get_url(url)
 
 
 def get_page(url, subject, page):
@@ -153,8 +140,8 @@ def build_xbmc_items(topic, items):
 
         url_params = {"action": "play", "video_id": video["id"]}
         log.debug("Added list item: {} :: {}".format(
-                 build_url(base_url, url_params), list_item))
-        yield (addon_handle, build_url(base_url, url_params), list_item)
+                 build_url(Plugin.url, url_params), list_item))
+        yield (Plugin.handle, build_url(Plugin.url, url_params), list_item)
 
 
 def get_next_page(text):
@@ -188,7 +175,7 @@ def list_videos(topic, page=1):
     list_items = build_xbmc_items(topic, items)
     next_page_item = get_next_page(http)
     next_page_url = build_url(
-        base_url, {"action": "list", "topic": topic, "page": page + 1})
+        Plugin.url, {"action": "list", "topic": topic, "page": page + 1})
     if list_items:
         log.debug("Built Menu for {topic}".format(topic=topic))
 
@@ -196,8 +183,8 @@ def list_videos(topic, page=1):
             xbmcplugin.addDirectoryItem(*item)
         if next_page_item:
             xbmcplugin.addDirectoryItem(
-                addon_handle, next_page_url, next_page_item, isFolder=True)
-        xbmcplugin.endOfDirectory(addon_handle)
+                Plugin.handle, next_page_url, next_page_item, isFolder=True)
+        xbmcplugin.endOfDirectory(Plugin.handle)
         return True
     else:
         log.error("Failed to build list_items in Kodi for", topic)
@@ -212,14 +199,14 @@ def list_all_sciences():
         url_params = {"action": "list", "topic": link}
         is_folder = True
         xbmcplugin.addDirectoryItem(
-            addon_handle,
-            build_url(base_url, url_params),
+            Plugin.handle,
+            build_url(Plugin.url, url_params),
             list_item,
             is_folder)
     xbmcplugin.addSortMethod(
-        addon_handle,
+        Plugin.handle,
         xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
-    xbmcplugin.endOfDirectory(addon_handle)
+    xbmcplugin.endOfDirectory(Plugin.handle)
 
 
 def list_main_menu():
@@ -231,21 +218,21 @@ def list_main_menu():
         url_params = {"action": "list", "topic": topic}
         is_folder = True
         log.debug("Added list item: {} :: {} :: {}".format(
-            build_url(base_url, url_params), list_item, is_folder))
+            build_url(Plugin.url, url_params), list_item, is_folder))
         menu_items.append((
-            build_url(base_url, url_params),
+            build_url(Plugin.url, url_params),
             list_item,
             is_folder))
     # For testing purposes
     test_li = xbmcgui.ListItem('Test')
-    test_url = build_url(base_url, {"action": "test"})
-    xbmcplugin.addDirectoryItem(addon_handle, test_url, test_li)
+    test_url = build_url(Plugin.url, {"action": "test"})
+    xbmcplugin.addDirectoryItem(Plugin.handle, test_url, test_li)
     # End of testing purposes
-    xbmcplugin.addDirectoryItems(addon_handle, menu_items, len(menu_items))
+    xbmcplugin.addDirectoryItems(Plugin.handle, menu_items, len(menu_items))
     xbmcplugin.addSortMethod(
-        addon_handle,
+        Plugin.handle,
         xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
-    xbmcplugin.endOfDirectory(addon_handle)
+    xbmcplugin.endOfDirectory(Plugin.handle)
 
 
 def list_topic(topic, page):
@@ -265,7 +252,7 @@ def play_video(video_id):
     log.debug("Playing video {video_id}".format(video_id=video_id))
     path = youtubeAddonUrl + video_id
     listitem = xbmcgui.ListItem(path=path, )
-    xbmcplugin.setResolvedUrl(addon_handle, True, listitem)
+    xbmcplugin.setResolvedUrl(Plugin.handle, True, listitem)
     # xbmc.executebuiltin(
     #    "XBMC.PlayMedia(plugin://plugin.video.youtube/play/?video_id=" +
     #    video_id + ")")
@@ -284,18 +271,21 @@ def test():
 action = args.get("action")
 log.debug("Action = '{action}'".format(action=action))
 
+menu = List()
 if action is None:
-    list_main_menu()
+    #list_main_menu()
+    menu.main_menu()
 elif len(action) > 1:
     log.error("Action: {}".format(str(action)))
     raise MultipleActions("Multiple actions in URL!")
 elif action[0] == "list":
-    addon_handle = int(sys.argv[1])
+    Plugin.handle = int(sys.argv[1])
     page = int(args["page"][0]) if "page" in args else 1
-    list_topic(args["topic"][0], page)
+    #list_topic(args["topic"][0], page)
+    menu.display_topic(args["topic"][0], page)
 elif action[0] == "play":
-    addon_handle = int(sys.argv[1])
+    Plugin.handle = int(sys.argv[1])
     play_video(args["video_id"][0])
 elif action[0] == "test":
-    addon_handle = int(sys.argv[1])
+    Plugin.handle = int(sys.argv[1])
     test()
