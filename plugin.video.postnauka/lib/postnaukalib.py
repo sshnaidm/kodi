@@ -23,19 +23,14 @@ try:
 except:
     import lib.storageserverdummy as StorageServer
 
-
 youtubeAddonUrl = ("plugin://plugin.video.youtube/"
                    "?path=/root/video&action=play_video&videoid=")
 
 YTID = re.compile("http://www.youtube.com/embed/([^?]+)?")
 PAGE = re.compile(".*/page/(\d+)")
 
-MAIN_MENU = (
-            ("Видео", "allvideos"),
-            ("Лекции", "alllectures"),
-            ("Науки", "science"),
-            ("Курсы", "allcourses")
-)
+MAIN_MENU = (("Видео", "allvideos"), ("Лекции", "alllectures"),
+             ("Науки", "science"), ("Курсы", "allcourses"))
 
 SCIENCES = {
     "biology": "Биология",
@@ -61,7 +56,6 @@ URLS = {
     "allvideos": SITE + "video",
     "allcourses": SITE + "courses",
     "alllectures": SITE + "lectures",
-
 }
 
 XBOX = xbmc.getCondVisibility("System.Platform.xbox")
@@ -77,8 +71,7 @@ class Plugin:
     name = get_plugin_name(sys.argv[0])
     addon = xbmcaddon.Addon(id=name)
     path = addon.getAddonInfo('path').decode('utf-8')
-    profile = xbmc.translatePath(
-        addon.getAddonInfo('profile')).decode('utf-8')
+    profile = xbmc.translatePath(addon.getAddonInfo('profile')).decode('utf-8')
 
 
 class Cache:
@@ -86,6 +79,7 @@ class Cache:
                                int(Plugin.addon.getSetting("main_cache")))
     page_cache = StorageServer("page_cache",
                                int(Plugin.addon.getSetting("page_cache")))
+
 
 CACHE = Cache.__dict__
 
@@ -97,12 +91,13 @@ def cached2(cache_time):
             log = Logger()
             log.debug("Caching decorator with type {}".format(cache_time))
             cache_function = StorageServer("main_cache", int(cache_time))
-            log.debug("Choosing cache function {}".format(
-                cache_function))
+            log.debug("Choosing cache function {}".format(cache_function))
             #    return cache_function.cacheFunction(func, *args, **kwargs)
             # else:
             #    return func(*args, **kwargs)
+
         return wrapper
+
     return deca
 
 
@@ -210,7 +205,6 @@ class Logger(Plugin):
 
 
 class Web:
-
     def __init__(self):
         self.url = None
         self.log = Logger()
@@ -242,7 +236,6 @@ class Web:
 
 
 class Parser:
-
     def __init__(self):
         self.log = Logger()
         self.parser = "html.parser"
@@ -264,15 +257,15 @@ class Parser:
         video["play"] = youtubeAddonUrl + video["id"]
         video["title"] = soup.find("meta", itemprop="name").get("content")
         video["img"] = soup.find("meta", itemprop="image").get("content")
-        video["summary"] = soup.find("meta", itemprop="description").get(
-            "content")
+        video["summary"] = soup.find("meta",
+                                     itemprop="description").get("content")
         video["date"] = soup.find("div", class_="p-data").contents[0]
         video["category"] = soup.select('h3[class="p-cat"] > a')[0].text
-        video["views"] = int(
-            digitize(soup.findAll("div", class_="p-comms")[1].text))
+        video["views"] = int(digitize(soup.findAll("div",
+                                                   class_="p-comms")[1].text))
         video["tags"] = list(soup.find("div", id="p-tags").strings)
-        dump("testttt_"+video["id"], encoded_dict(video).__repr__())
-        dump("real_"+video["id"], video.__repr__())
+        dump("testttt_" + video["id"], encoded_dict(video).__repr__())
+        dump("real_" + video["id"], video.__repr__())
         return video
 
     def extract_video_links(self, text):
@@ -293,11 +286,11 @@ class Parser:
         lis = soup.select('div[id="m"] > li a[title]')
         links = list(set([i["href"] for i in lis]))
         self.log.debug("Extracted {} links from page".format(len(links)))
-        links = [link for link in links if
-                 "/video/" in link or
-                 "/lecture/" in link or
-                 "/course/" in link
-                 ]
+        links = [
+            link
+            for link in links
+            if "/video/" in link or "/lecture/" in link or "/course/" in link
+        ]
         return links
 
     def _get_next_and_total_pages(self, text):
@@ -314,9 +307,9 @@ class Parser:
         if not total_pages:
             last_tag = soup.find("a", class_="last")
             if not last_tag and next_page:
-                larger = max(
-                    [int(i.text)
-                     for i in soup.findAll("a", class_="page larger")])
+                larger = max([int(i.text)
+                              for i in soup.findAll("a",
+                                                    class_="page larger")])
                 total_pages = max(next_page, larger)
             else:
                 url = last_tag["href"]
@@ -329,9 +322,9 @@ class Parser:
         current_page, next_page, total = self._get_next_and_total_pages(text)
         if current_page != total:
             next_page_item = xbmcgui.ListItem(
-                label="<Следующая [{next}] из [{total}]>".format(
-                    next=next_page,
-                    total=total))
+                label="<Следующая [{next}] из [{total}]>".format(next=
+                                                                 next_page,
+                                                                 total=total))
             next_page_item.setProperty('IsPlayable', 'false')
             return next_page_item
         else:
@@ -353,12 +346,13 @@ def kodi(sort=None):
             if sort:
                 xbmcplugin.addSortMethod(Plugin.handle, sort)
             xbmcplugin.endOfDirectory(Plugin.handle)
+
         return wrapper
+
     return deca
 
 
 class List:
-
     def __init__(self):
         self.log = Logger()
         self.web = Web()
@@ -367,17 +361,13 @@ class List:
     @kodi()
     def main_menu(self):
         for folder, topic in MAIN_MENU:
-            list_item = xbmcgui.ListItem(
-                label=folder,
-                iconImage='DefaultFolder.png')
+            list_item = xbmcgui.ListItem(label=folder,
+                                         iconImage='DefaultFolder.png')
             url_params = {"action": "list", "topic": topic}
             is_folder = True
             self.log.debug("Added list item: {} :: {} :: {}".format(
                 build_url(Plugin.url, url_params), list_item, is_folder))
-            yield (
-                build_url(Plugin.url, url_params),
-                list_item,
-                is_folder)
+            yield (build_url(Plugin.url, url_params), list_item, is_folder)
         # For testing purposes
         test_li = xbmcgui.ListItem('Test')
         test_url = build_url(Plugin.url, {"action": "test"})
@@ -391,21 +381,17 @@ class List:
     def list_sciences(self):
         # items = []
         for link, science in SCIENCES.iteritems():
-            list_item = xbmcgui.ListItem(
-                label=science,
-                iconImage='DefaultFolder.png')
+            list_item = xbmcgui.ListItem(label=science,
+                                         iconImage='DefaultFolder.png')
             url_params = {"action": "list", "topic": link}
             is_folder = True
-            yield (
-                build_url(Plugin.url, url_params),
-                list_item,
-                is_folder)
+            yield (build_url(Plugin.url, url_params), list_item, is_folder)
             # items.append(list_item)
-        # kodi_build(items, sort=xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
+            # kodi_build(items, sort=xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
 
     def display_topic(self, topic, page):
-        self.log.debug("Listing topic {topic} page {p}".format(
-            topic=topic, p=page))
+        self.log.debug("Listing topic {topic} page {p}".format(topic=topic,
+                                                               p=page))
         if topic == "science":
             self.list_sciences()
         else:
@@ -413,19 +399,15 @@ class List:
 
     def _get_video_details(self, link):
         video_web_page = self.web.get_page(link, cache_type="page_cache")
-        return cached_with(
-            "page_cache",
-            self.parser.get_video_details_from,
-            video_web_page
-        )
+        return cached_with("page_cache", self.parser.get_video_details_from,
+                           video_web_page)
 
     def _build_video_item(self, video):
-        list_item = xbmcgui.ListItem(
-            label=video["title"],
-            iconImage=video["img"],
-            thumbnailImage=video["img"],
-            #    path=video["play"]
-        )
+        list_item = xbmcgui.ListItem(label=video["title"],
+                                     iconImage=video["img"],
+                                     thumbnailImage=video["img"],
+                                     #    path=video["play"]
+                                     )
         list_item.setInfo('video', {
             'title': video['title'],
             'genre': video['category'],
@@ -438,21 +420,17 @@ class List:
         return (build_url(Plugin.url, url_params), list_item)
 
     def _build_next_item(self, topic, page, item):
-        return (build_url(
-            Plugin.url,
-            {
-                "action": "list",
-                "topic": topic,
-                "page": page + 1
-            }
-        ),
-            item,
-            True)
+        return (build_url(Plugin.url, {
+            "action": "list",
+            "topic": topic,
+            "page": page + 1
+        }), item, True)
 
     @kodi()
     def list_videos(self, topic, page=1):
-        self.log.debug("Getting URL for {topic} and page {page}".format(
-            topic=topic, page=page))
+        self.log.debug(
+            "Getting URL for {topic} and page {page}".format(topic=topic,
+                                                             page=page))
         text = self.web.get_page(URLS[topic], page, "main_cache")
         parse = self.parser.extract_video_links_science if (
             topic in SCIENCES) else self.parser.extract_video_links
