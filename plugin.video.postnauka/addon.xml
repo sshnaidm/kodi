@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addon id="plugin.video.postnauka"
        name="Postnauka"
-       version="1.0.6"
+       version="1.0.7"
        provider-name="Postnauka">
   <requires>
     <import addon="xbmc.python" version="2.1.0"/>
@@ -20,6 +20,10 @@
     <summary>Постнаука (Postnauka)</summary>
     <description>Postnauka - научно-популярные видео с сайта postnauka.ru</description>
     <website>https://github.com/sshnaidm/kodi</website>
+    <source>https://github.com/sshnaidm/kodi</source>
+    <email>pullusum@gmail.com</email>
+    <license>GNU GENERAL PUBLIC LICENSE. Version 3, 29 June 2007</license>
     <platform>all</platform>
+    <language>ru</language>
   </extension>
 </addon>

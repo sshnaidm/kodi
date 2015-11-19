@@ -1,3 +1,6 @@
+v1.0.7
+- added search
+
 v1.0.6
 - speed up with threading
 

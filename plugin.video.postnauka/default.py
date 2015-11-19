@@ -54,6 +54,10 @@ elif action[0] == "list":
 elif action[0] == "play":
     Plugin.handle = int(sys.argv[1])
     play_video(args["video_id"][0])
+elif action[0] == "search":
+    Plugin.handle = int(sys.argv[1])
+    page = int(args["page"][0]) if "page" in args else 1
+    menu.list_search(page, args.get("query"))
 # elif action[0] == "test":
 #     Plugin.handle = int(sys.argv[1])
 #     test()

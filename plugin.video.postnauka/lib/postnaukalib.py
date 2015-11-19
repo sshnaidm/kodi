@@ -59,6 +59,7 @@ URLS = {
     "allvideos": SITE + "video",
     "allcourses": SITE + "courses",
     "alllectures": SITE + "lectures",
+    "search": SITE + "?s={word}",
 }
 
 XBOX = xbmc.getCondVisibility("System.Platform.xbox")
@@ -124,6 +125,10 @@ class MultipleActions(PostnaukaError):
 
 
 class WebError(PostnaukaError):
+    pass
+
+
+class SearchError(PostnaukaError):
     pass
 
 
@@ -213,6 +218,8 @@ class Web:
         return text
 
     def get_page(self, url, page=None, cache_type=None):
+        self.log.debug("Retrieve URL={url} page={p}, cache={cache}".format(
+            url=url, p=page, cache=cache_type))
         if page and page != 1:
             url += "/page/{number}".format(number=page)
         if cache_type:
@@ -269,9 +276,10 @@ class Parser:
             self.log.error("Failed to get video links from page!")
         return links
 
-    def extract_video_links_science(self, text):
+    def extract_video_links_science(self, text, search=False):
         soup = BeautifulSoup(text, self.parser)
-        lis = soup.select('div[id="m"] > li a[title]')
+        div_id = "a" if search else "m"
+        lis = soup.select('div[id="{id}"] > li a[title]'.format(id=div_id))
         links = list(set([i["href"] for i in lis]))
         self.log.debug("Extracted {0} links from page".format(len(links)))
         links = [
@@ -281,9 +289,14 @@ class Parser:
         ]
         return links
 
+    def extract_video_links_search(self, text):
+        return self.extract_video_links_science(text, search=True)
+
     def _get_next_and_total_pages(self, text):
         soup = BeautifulSoup(text, self.parser)
         total_pages = current_page = next_page = None
+        if soup.find("span", class_="current") is None:
+            return
         current_page = int(digitize(soup.find("span", class_="current").text))
         next_page_tag = soup.find("a", class_="nextpostslink")
         if next_page_tag:
@@ -307,8 +320,12 @@ class Parser:
         return current_page, next_page, total_pages
 
     def get_next_page_item(self, text):
-        current_page, next_page, total = self._get_next_and_total_pages(text)
-        if current_page != total:
+        page_data = self._get_next_and_total_pages(text)
+        if page_data:
+            current_page, next_page, total = page_data
+        else:
+            return
+        if current_page and current_page != total:
             next_page_item = xbmcgui.ListItem(
                 label="<Следующая [{next}] из [{total}]>".format(
                     next=next_page,
@@ -316,7 +333,7 @@ class Parser:
             next_page_item.setProperty('IsPlayable', 'false')
             return next_page_item
         else:
-            return None
+            return
 
 
 def kodi(sort=None):
@@ -358,10 +375,13 @@ class List:
             self.log.debug("Added list item: {0} :: {1} :: {2}".format(
                 build_url(Plugin.url, url_params), list_item, is_folder))
             yield (build_url(Plugin.url, url_params), list_item, is_folder)
+        search = xbmcgui.ListItem('Поиск')
+        search_url = build_url(Plugin.url, {"action": "search"})
+        yield (search_url, search, True)
         # For testing purposes
-        test_li = xbmcgui.ListItem('Test')
-        test_url = build_url(Plugin.url, {"action": "test"})
-        yield (test_url, test_li)
+        # test_li = xbmcgui.ListItem('Test')
+        # test_url = build_url(Plugin.url, {"action": "test"})
+        # yield (test_url, test_li)
         # End of testing purposes
 
     @kodi(sort=xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
@@ -384,8 +404,6 @@ class List:
         else:
             self.list_videos(topic, page)
 
-
-
     def _build_video_item(self, video):
         list_item = xbmcgui.ListItem(label=video["title"],
                                      iconImage=video["img"],
@@ -403,15 +421,19 @@ class List:
         url_params = {"action": "play", "video_id": video["id"]}
         return (build_url(Plugin.url, url_params), list_item)
 
-    def _build_next_item(self, topic, page, item):
-        return (build_url(Plugin.url, {
-            "action": "list",
+    def _build_next_item(self, topic, page, item, query=None):
+        action = "search" if topic == "search" else "list"
+        action_item = {
+            "action": action,
             "topic": topic,
             "page": page + 1
-        }), item, True)
+        }
+        if topic == "search":
+            action_item.update({"query": query})
+        return (build_url(Plugin.url, action_item), item, True)
 
     @kodi()
-    def list_videos(self, topic, page=1):
+    def list_videos(self, topic, page=1, search_query=None):
         def _get_video_details(link):
             video_web_page = self.web.get_page(link, cache_type="page_cache")
             response[link] = cached_with(
@@ -423,10 +445,13 @@ class List:
             "Getting URL for {topic} and page {page}".format(topic=topic,
                                                              page=page))
         text = self.web.get_page(URLS[topic], page, "main_cache")
-        parse = self.parser.extract_video_links_science if (
-            topic in SCIENCES) else self.parser.extract_video_links
+        if topic == "search":
+            parse = self.parser.extract_video_links_search
+        elif topic in SCIENCES:
+            parse = self.parser.extract_video_links_science
+        else:
+            parse = self.parser.extract_video_links
         links = cached_with("main_cache", parse, text)
-
         response, pool = {}, []
         for link in links:
             pool.append(threading.Thread(
@@ -438,7 +463,35 @@ class List:
             t.join()
         for data in response.itervalues():
             yield self._build_video_item(data)
-
         next_item = self.parser.get_next_page_item(text)
         if next_item:
-            yield self._build_next_item(topic, page, next_item)
+            yield self._build_next_item(topic, page, next_item, search_query)
+        else:
+            self.log.debug("No next page")
+
+    def list_search(self, page, query=None):
+        if page == 1:
+            kb = xbmc.Keyboard('', "Поиск")
+            kb.doModal()
+            if kb.isConfirmed():
+                search = kb.getText()
+            if search and isinstance(search, unicode):
+                search = search.encode('utf-8')
+        elif query:
+            if isinstance(query[0], unicode):
+                search = query[0].encode('utf-8')
+            else:
+                search = query[0]
+        else:
+            raise SearchError("Nothing to search!")
+        if page == 1:
+            URLS["search"] = URLS["search"].format(word=search)
+        else:
+            URLS["search"] = (
+                SITE +
+                "page/" +
+                str(page) +
+                "?s={word}".format(word=search)
+                )
+        self.log.debug("Searching for " + search)
+        self.list_videos("search", page=page, search_query=search)
