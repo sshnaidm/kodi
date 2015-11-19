@@ -8,6 +8,7 @@ import sys
 import os
 import re
 import requests
+import threading
 import functools
 import xbmcaddon
 import xbmcgui
@@ -383,10 +384,7 @@ class List:
         else:
             self.list_videos(topic, page)
 
-    def _get_video_details(self, link):
-        video_web_page = self.web.get_page(link, cache_type="page_cache")
-        return cached_with("page_cache", self.parser.get_video_details_from,
-                           video_web_page)
+
 
     def _build_video_item(self, video):
         list_item = xbmcgui.ListItem(label=video["title"],
@@ -414,6 +412,13 @@ class List:
 
     @kodi()
     def list_videos(self, topic, page=1):
+        def _get_video_details(link):
+            video_web_page = self.web.get_page(link, cache_type="page_cache")
+            response[link] = cached_with(
+                "page_cache",
+                self.parser.get_video_details_from,
+                video_web_page)
+
         self.log.debug(
             "Getting URL for {topic} and page {page}".format(topic=topic,
                                                              page=page))
@@ -421,8 +426,19 @@ class List:
         parse = self.parser.extract_video_links_science if (
             topic in SCIENCES) else self.parser.extract_video_links
         links = cached_with("main_cache", parse, text)
+
+        response, pool = {}, []
         for link in links:
-            yield self._build_video_item(self._get_video_details(link))
+            pool.append(threading.Thread(
+                target=_get_video_details,
+                args=(link,)))
+        for t in pool:
+            t.start()
+        for t in pool:
+            t.join()
+        for data in response.itervalues():
+            yield self._build_video_item(data)
+
         next_item = self.parser.get_next_page_item(text)
         if next_item:
             yield self._build_next_item(topic, page, next_item)
