@@ -8,7 +8,6 @@ import sys
 import os
 import re
 import requests
-import threading
 import functools
 import xbmcaddon
 import xbmcgui
@@ -31,6 +30,7 @@ youtubeAddonUrl = ("plugin://plugin.video.youtube/"
 
 YTID = re.compile(r'//www.youtube.com/embed/([^"?\']+)')
 PAGE = re.compile(".*/page/(\d+)")
+DATE = re.compile(".*/img/(\d{4})/(\d{2})/.*")
 
 MAIN_MENU = (("Видео", "allvideos"), ("Лекции", "alllectures"),
              ("Науки", "science"), ("Курсы", "allcourses"))
@@ -195,6 +195,7 @@ class Logger(Plugin):
 
 
 class Web:
+
     def __init__(self):
         self.url = None
         self.log = Logger()
@@ -229,65 +230,72 @@ class Web:
 
 
 class Parser:
+
     def __init__(self):
         self.log = Logger()
         self.parser = "html5lib"
         self.log.debug("BS4 version:" + bs4.__version__)
 
-    def get_video_details_from(self, text):
-        log = self.log
+    def get_video_id_from_url(self, text):
         soup = BeautifulSoup(text, self.parser)
-        link = soup.find("meta", itemprop="url").get("content")
-        video = {"url": link}
-        log.debug("Video URL: {0}".format(video["url"]))
         iframe = soup.find("iframe").attrs["src"]
-        log.debug("IFRAME: {0}".format(str(iframe)))
+        self.log.debug("IFRAME: {0}".format(str(iframe)))
         if "//www.youtube.com/embed" in iframe:
             youtube_id_match = YTID.search(iframe)
         else:
-            log.error("Not found youtube id in iframe:" + str(iframe))
+            self.log.error("Not found youtube id in iframe:" + str(iframe))
             return None
         if not youtube_id_match:
             return None
-        video["id"] = youtube_id_match.group(1)
-        log.debug("Video Youtube ID: {0}".format(video["id"]))
-        video["play"] = youtubeAddonUrl + video["id"]
-        video["title"] = soup.find("meta", itemprop="name").get("content")
-        video["img"] = soup.find("meta", itemprop="image").get("content")
-        video["summary"] = soup.find("meta",
-                                     itemprop="description").get("content")
-        video["date"] = soup.find("div", class_="p-data").contents[0]
-        video["category"] = soup.select('h3[class="p-cat"] > a')[0].text
-        video["views"] = int(digitize(soup.findAll("div",
-                                                   class_="p-comms")[1].text))
-        video["tags"] = list(soup.find("div", id="p-tags").strings)
-        return video
+        return youtube_id_match.group(1)
 
     def extract_video_links(self, text):
-        links = []
+        videos = []
         soup = BeautifulSoup(text, self.parser)
-        lis = soup.select('div[id="project"] > li')
-        for li in lis:
-            link = li.find("a").attrs["href"]
-            links.append(link)
-        if links:
+        links = soup.select('div[id="project"] > li')
+        for li in links:
+            video = {}
+            video["url"] = li.find("a").attrs["href"]
+            video["title"] = li.find("a").attrs["title"]
+            video["img"] = li.find("img").attrs["src"]
+            video["summary"] = li.select('div[class="m-subt"] > a')[0].text
+            video["date"] = ".".join(DATE.search(video["img"]).groups())
+            video["category"] = li.select('div[class="m-cat"]')[0].text
+            video["views"] = int(digitize(
+                li.select('div[class="m-comms"]')[1].text))
+            videos.append(video)
+        if videos:
             self.log.debug("Succeeded to get video links from page")
         else:
             self.log.error("Failed to get video links from page!")
-        return links
+        return videos
 
     def extract_video_links_science(self, text, search=False):
         soup = BeautifulSoup(text, self.parser)
+        videos = []
         div_id = "a" if search else "m"
-        lis = soup.select('div[id="{id}"] > li a[title]'.format(id=div_id))
-        links = list(set([i["href"] for i in lis]))
-        self.log.debug("Extracted {0} links from page".format(len(links)))
-        links = [
-            link
-            for link in links
-            if "/video/" in link or "/lecture/" in link or "/course/" in link
-        ]
-        return links
+        lis = soup.select('div[id="{id}"] > li'.format(id=div_id))
+        for li in lis:
+            link = li.find("a").attrs["href"]
+            if "/video/" in link or "/lecture/" in link or "/course/" in link:
+                video = {}
+                video["url"] = li.find("a").attrs["href"]
+                video["title"] = li.find("a").attrs["title"]
+                video["img"] = li.find("img").attrs["src"]
+                video["summary"] = li.select(
+                    'div[class="{div_id}-subt"] > a'.format(
+                        div_id=div_id))[0].text
+                video["date"] = ".".join(DATE.search(video["img"]).groups())
+                video["category"] = li.select(
+                    'div[class="{div_id}-cat"]'.format(div_id=div_id))[0].text
+                if not search:
+                    video["views"] = int(digitize(
+                        li.select('div[class="{div_id}-comms"]'.format(
+                            div_id=div_id))[1].text))
+                else:
+                    video["views"] = 0
+                videos.append(video)
+        return videos
 
     def extract_video_links_search(self, text):
         return self.extract_video_links_science(text, search=True)
@@ -358,6 +366,7 @@ def kodi(sort=None):
 
 
 class List:
+
     def __init__(self):
         self.log = Logger()
         self.web = Web()
@@ -404,7 +413,18 @@ class List:
         else:
             self.list_videos(topic, page)
 
-    def _build_video_item(self, video):
+    def _build_next_item(self, topic, page, item, query=None):
+        action = "search" if topic == "search" else "list"
+        action_item = {
+            "action": action,
+            "topic": topic,
+            "page": page + 1
+        }
+        if topic == "search":
+            action_item.update({"query": query})
+        return (build_url(Plugin.url, action_item), item, True)
+
+    def _build_video_short_item(self, video):
         list_item = xbmcgui.ListItem(label=video["title"],
                                      iconImage=video["img"],
                                      thumbnailImage=video["img"],
@@ -418,27 +438,20 @@ class List:
             'tvshowtitle': video['title'],
         })
         list_item.setProperty('IsPlayable', 'true')
-        url_params = {"action": "play", "video_id": video["id"]}
+        url_params = {"action": "play_video", "video_url": video["url"]}
         return (build_url(Plugin.url, url_params), list_item)
 
-    def _build_next_item(self, topic, page, item, query=None):
-        action = "search" if topic == "search" else "list"
-        action_item = {
-            "action": action,
-            "topic": topic,
-            "page": page + 1
-        }
-        if topic == "search":
-            action_item.update({"query": query})
-        return (build_url(Plugin.url, action_item), item, True)
+    def get_video_id_from_url(self, url):
+        video_web_page = self.web.get_page(url, cache_type="page_cache")
+        return self.parser.get_video_id_from_url(video_web_page)
 
     @kodi()
     def list_videos(self, topic, page=1, search_query=None):
         def _get_video_details(link):
             video_web_page = self.web.get_page(link, cache_type="page_cache")
-            response[link] = cached_with(
+            return cached_with(
                 "page_cache",
-                self.parser.get_video_details_from,
+                self.parser.get_video_short_details_from,
                 video_web_page)
 
         self.log.debug(
@@ -451,18 +464,10 @@ class List:
             parse = self.parser.extract_video_links_science
         else:
             parse = self.parser.extract_video_links
-        links = cached_with("main_cache", parse, text)
-        response, pool = {}, []
-        for link in links:
-            pool.append(threading.Thread(
-                target=_get_video_details,
-                args=(link,)))
-        for t in pool:
-            t.start()
-        for t in pool:
-            t.join()
-        for data in response.itervalues():
-            yield self._build_video_item(data)
+        videos = cached_with("main_cache", parse, text)
+
+        for video in videos:
+            yield self._build_video_short_item(video)
         next_item = self.parser.get_next_page_item(text)
         if next_item:
             yield self._build_next_item(topic, page, next_item, search_query)
@@ -492,6 +497,6 @@ class List:
                 "page/" +
                 str(page) +
                 "?s={word}".format(word=search)
-                )
+            )
         self.log.debug("Searching for " + search)
         self.list_videos("search", page=page, search_query=search)

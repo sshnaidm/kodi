@@ -1,3 +1,7 @@
+v1.0.8
+- removed threading - didn't work well on androids
+- added speed up
+
 v1.0.7
 - added search
 
