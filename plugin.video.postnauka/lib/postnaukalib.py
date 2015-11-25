@@ -33,7 +33,7 @@ PAGE = re.compile(".*/page/(\d+)")
 DATE = re.compile(".*/img/(\d{4})/(\d{2})/.*")
 
 MAIN_MENU = (("Видео", "allvideos"), ("Лекции", "alllectures"),
-             ("Науки", "science"), ("Курсы", "allcourses"))
+             ("Науки", "science"), ("Курсы", "allcourses"), ("ТВ", "alltv"))
 
 SCIENCES = {
     "biology": "Биология",
@@ -59,6 +59,7 @@ URLS = {
     "allvideos": SITE + "video",
     "allcourses": SITE + "courses",
     "alllectures": SITE + "lectures",
+    "alltv": SITE + "tv",
     "search": SITE + "?s={word}",
 }
 
