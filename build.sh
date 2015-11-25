@@ -11,7 +11,10 @@ fi
 zip -r "${CURDIR}/${PLUGIN}.zip" "${CURDIR}/${PLUGIN}" -x "*pyo" -x "*/resources/language/*" -x "*.idea/*"
 sed -i 's/id="debug_enabled" default="false"/id="debug_enabled" default="true"/' "${CURDIR}/${PLUGIN}/resources/settings.xml"
 VERSION=$(cat ${CURDIR}/${PLUGIN}/addon.xml | python -c "import sys,re;sys.stdout.write(re.findall('version=\"([^\"]+)\"', sys.stdin.read())[1])")
+git rm "${CURDIR}/${PLUGIN}-*.zip"
+rm -f "${CURDIR}/${PLUGIN}-*.zip"
 zip -r "${CURDIR}/${PLUGIN}-${VERSION}.zip" "${CURDIR}/${PLUGIN}" -x "*pyo" -x "*/resources/language/*" -x "*.idea/*"
+git add "${CURDIR}/${PLUGIN}-*.zip"
 echo "Completed!"
 
 
