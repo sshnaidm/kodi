@@ -447,13 +447,6 @@ class List:
 
     @kodi()
     def list_videos(self, topic, page=1, search_query=None):
-        def _get_video_details(link):
-            video_web_page = self.web.get_page(link, cache_type="page_cache")
-            return cached_with(
-                "page_cache",
-                self.parser.get_video_short_details_from,
-                video_web_page)
-
         self.log.debug(
             "Getting URL for {topic} and page {page}".format(topic=topic,
                                                              page=page))
